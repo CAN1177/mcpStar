@@ -11,18 +11,27 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-console.log("当前目录:", __dirname);
-console.log("环境变量状态:", {
-  DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY ? "已设置" : "未设置",
-  API_KEY_LENGTH: process.env.DEEPSEEK_API_KEY
-    ? process.env.DEEPSEEK_API_KEY.length
-    : 0,
-});
+// 日志记录函数 - 写入临时文件而不是控制台输出
+function logToFile(message) {
+  const logPath = "/tmp/transemantix-log.txt";
+  fs.appendFileSync(logPath, new Date().toISOString() + ": " + message + "\n");
+}
+
+logToFile("当前目录: " + __dirname);
+logToFile(
+  "环境变量状态: " +
+    JSON.stringify({
+      DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY ? "已设置" : "未设置",
+      API_KEY_LENGTH: process.env.DEEPSEEK_API_KEY
+        ? process.env.DEEPSEEK_API_KEY.length
+        : 0,
+    })
+);
 
 // 检查 API Key 是否设置
 if (!process.env.DEEPSEEK_API_KEY) {
-  console.error("错误: 未设置 DEEPSEEK_API_KEY 环境变量");
-  console.error("请通过 --token 参数提供 DeepSeek API Key");
+  logToFile("错误: 未设置 DEEPSEEK_API_KEY 环境变量");
+  logToFile("请通过 --token 参数提供 DeepSeek API Key");
   process.exit(1);
 }
 
@@ -34,7 +43,7 @@ const deepseek = new OpenAI({
 
 async function translateWithDeepSeek(chineseText, style) {
   try {
-    console.log(`开始翻译: ${chineseText}, 样式: ${style}`);
+    logToFile(`开始翻译: ${chineseText}, 样式: ${style}`);
 
     const prompt = `请将以下中文文本翻译成适合编程使用的英文命名：${chineseText}
 要求：
@@ -58,10 +67,10 @@ async function translateWithDeepSeek(chineseText, style) {
     });
 
     const result = response.choices[0].message.content.trim();
-    console.log(`翻译结果: ${result}`);
+    logToFile(`翻译结果: ${result}`);
     return result;
   } catch (error) {
-    console.error("DeepSeek API 调用失败:", error);
+    logToFile("DeepSeek API 调用失败: " + error.message);
     throw new Error(`翻译服务暂时不可用: ${error.message}`);
   }
 }
@@ -102,30 +111,33 @@ server.tool(
           selected: style === "camelCase" ? camelResult : pascalResult,
         };
 
-        console.log("翻译完成，结果:", result);
+        logToFile("翻译完成，结果: " + JSON.stringify(result));
         return {
           content: [
             {
               type: "text",
-              text: JSON.stringify(result, null, 2),
+              text: `翻译结果：
+camelCase: ${result.camelCase}
+PascalCase: ${result.PascalCase}
+selected (${style}): ${result.selected}`,
             },
           ],
         };
       } else {
         // 原有逻辑
         result = await translateWithDeepSeek(input, style);
-        console.log("翻译完成，结果:", result);
+        logToFile("翻译完成，结果: " + result);
         return {
           content: [
             {
               type: "text",
-              text: result,
+              text: `翻译结果 (${style}): ${result}`,
             },
           ],
         };
       }
     } catch (error) {
-      console.error("翻译错误:", error);
+      logToFile("翻译错误: " + error.message);
       return {
         content: [
           {
@@ -175,6 +187,20 @@ server.tool(
             };
           })
         );
+
+        const resultText = results
+          .map(
+            (item) =>
+              `原文: ${item.original}
+  camelCase: ${item.camelCase}
+  PascalCase: ${item.PascalCase}
+  selected (${style}): ${item.selected}`
+          )
+          .join("\n\n");
+
+        return {
+          content: [{ type: "text", text: `批量翻译结果:\n\n${resultText}` }],
+        };
       } else {
         // 原有逻辑
         results = await Promise.all(
@@ -183,11 +209,17 @@ server.tool(
             return { original: input, translated };
           })
         );
-      }
 
-      return {
-        content: [{ type: "text", text: JSON.stringify(results, null, 2) }],
-      };
+        const resultText = results
+          .map((item) => `${item.original} -> ${item.translated}`)
+          .join("\n");
+
+        return {
+          content: [
+            { type: "text", text: `批量翻译结果 (${style}):\n${resultText}` },
+          ],
+        };
+      }
     } catch (error) {
       return {
         content: [{ type: "text", text: `批量翻译失败: ${error.message}` }],
@@ -196,12 +228,6 @@ server.tool(
     }
   }
 );
-
-// 日志记录函数 - 写入临时文件而不是控制台输出
-function logToFile(message) {
-  const logPath = "/tmp/transemantix-log.txt";
-  fs.appendFileSync(logPath, new Date().toISOString() + ": " + message + "\n");
-}
 
 // 捕获全局错误
 process.on("uncaughtException", (error) => {

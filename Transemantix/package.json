@@ -1,11 +1,11 @@
 {
   "name": "transemantix",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "汉语翻译为符合语义化的英文命名工具",
   "type": "module",
   "main": "src/index.js",
   "bin": {
-    "transemantix": "./bin/transemantix.js"
+    "transemantix": "bin/transemantix.js"
   },
   "scripts": {
     "start": "node src/server.js",
@@ -19,7 +19,7 @@
     "naming",
     "programming"
   ],
-  "author": "Your Name",
+  "author": "21silva",
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.8.0",
